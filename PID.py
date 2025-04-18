@@ -34,12 +34,11 @@ import simulation.lidar_sim as ldr
 # Global variables
 ########################################################################################
 
-kp = 5
-kd = 8
+kp = 4
+kd = 1
 
 rc = racecar_core.create_racecar()
-max_speed = .6
-desired_speed = .6
+max_speed = desired_speed = .5
 
 #The sections of the lidar's measurements
 #sector 6 is the left side and sector 2 is the right side
