@@ -21,10 +21,12 @@ the script.]
 
 import sys
 import math
+import random
+import numpy
 
 # If this file is nested inside a folder in the labs folder, the relative path should
 # be [1, ../../library] instead.
-sys.path.insert(0, '../library')
+sys.path.insert(0, 'library')
 import racecar_core
 import simulation.lidar_sim as ldr
 
@@ -32,7 +34,12 @@ import simulation.lidar_sim as ldr
 # Global variables
 ########################################################################################
 
+kp = 5
+kd = 8
+
 rc = racecar_core.create_racecar()
+max_speed = .6
+desired_speed = .6
 
 #The sections of the lidar's measurements
 #sector 6 is the left side and sector 2 is the right side
@@ -46,8 +53,10 @@ sections = {
     "s7": (585, 675),
     "s8": (-45, 45)
 }
-leftSide = sections["s6"]
-rightSide = sections["s2"]
+leftSide = sections["s7"]
+rightSide = sections["s1"]
+
+lastError = 0
 
 lidarSim = ldr.LidarSim(rc)
 
@@ -55,14 +64,69 @@ lidarSim = ldr.LidarSim(rc)
 # Functions
 ########################################################################################
 
-def getMedian(lst)-> float:
-    sortedLst = sorted(lst)
-    high = math.ceil(len(lst)/2)
-    low = math.floor(len(lst)/2)
-    return (sortedLst[high] + sortedLst[low])/2
+def quickselect(l, k, pivot_fn):
+    """
+    Select the kth element in l (0 based)
+    :param l: List of numerics
+    :param k: Index
+    :param pivot_fn: Function to choose a pivot, defaults to random.choice
+    :return: The kth element of l
+    """
+    if len(l) == 1:
+        assert k == 0
+        return l[0]
+
+    pivot = pivot_fn(l)
+
+    lows = [el for el in l if el < pivot]
+    highs = [el for el in l if el > pivot]
+    pivots = [el for el in l if el == pivot]
+
+    if k < len(lows):
+        return quickselect(lows, k, pivot_fn)
+    elif k < len(lows) + len(pivots):
+        # We got lucky and guessed the median
+        return pivots[0]
+    else:
+        return quickselect(highs, k - len(lows) - len(pivots), pivot_fn)
+
+def getMedian(l, pivot_fn=random.choice)-> float:
+    if len(l) == 0:
+        return 0.0 #if slice ever empties
+    if len(l) % 2 == 1:
+        return quickselect(l, len(l) // 2, pivot_fn)
+    else:
+        return 0.5 * (quickselect(l, len(l) / 2 - 1, pivot_fn) +
+                      quickselect(l, len(l) / 2, pivot_fn))
+
+#wraps start/end indices and returns that slices as a list
+def get_sector_samples(samples, sector):
+    start, end = sector
+    length = len(samples)
+    start = start % length
+    end = end % length
+    if start < end:
+        return samples[start:end]
+    else:
+        #wraps around the end of the list
+        return samples[start:] + samples[:end]
+        
+def scale(raw_min, raw_max, to_min, to_max, val):
+    return (val - raw_min) * (to_max - to_min) / (raw_max - raw_min) + to_min
+
+def pdControl(left, right)-> float:
+    global lastError
+    normalized_val = (right-left)/(right + left)
+    newError = normalized_val - lastError
+    lastError = newError
+    return normalized_val*kp + newError*kd
+
+#racecar callbacks
 
 # [FUNCTION] The start function is run once every time the start button is pressed
 def start():
+    global max_speed
+    rc.drive.set_max_speed(max_speed)
     rc.drive.stop()    
 
 
@@ -70,16 +134,32 @@ def start():
 # 60 frames per second or slower depending on processing speed) until the back button
 # is pressed  
 def update():
-    pass
+    samples = lidarSim.get_samples_async()
+    left_vals = get_sector_samples(samples, leftSide)
+    right_vals = get_sector_samples(samples, rightSide)
+    
+    medianLeft = getMedian(left_vals)
+    medianRight = getMedian(right_vals)
+
+
+
+    pdCtrl = pdControl(medianLeft, medianRight)
+    #angle = max(-1.0, min(1.0, pdCtrl))
+    rc.drive.set_speed_angle(max_speed, max(min(pdCtrl, 1),-1))
+    
 
 
 # [FUNCTION] update_slow() is similar to update() but is called once per second by
 # default. It is especially useful for printing debug messages, since printing a 
 # message every frame in update is computationally expensive and creates clutter
 def update_slow():
-    samples = lidarSim.get_samples()
-    medianLeft = getMedian(samples[leftSide[0]:leftSide[1]])
-    medianRight = getMedian(samples[rightSide[0]:rightSide[1]])
+    samples = lidarSim.get_samples_async()
+    #medianLeft = getMedian(samples[leftSide[0]:leftSide[1]])
+    #medianRight = getMedian(samples[rightSide[0]:rightSide[1]])
+    left_vals  = get_sector_samples(samples, leftSide)
+    right_vals = get_sector_samples(samples, rightSide)
+    medianLeft = getMedian(left_vals)
+    medianRight = getMedian(right_vals)
     print("Left distance: " + str(medianLeft))
     print("Right distance: " + str(medianRight))
 
