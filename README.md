@@ -80,7 +80,7 @@ Ensure the car is powered, and you have SSH access to the Jetson Xavier NX.
 * Racecar API Docs: [racecar_core · MIT BWSI](https://mitll-racecar.readthedocs.io/en/latest/racecar_core.html)
 * Installation Guide: [Part 1/2 from MIT BWSI Autonomous RACECAR](docs/BWSI%20Racecar%20Installation%20Guide%20Part%201.pdf)
 
-## Collaborators:
+## Collaborators
 * Alessandra Lanz
 * Noah Picarelli-Kombert
 * Paul Case
